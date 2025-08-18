@@ -1,0 +1,24 @@
+{
+  "name": "lady-byron/more-format",
+  "description": "Add blank-paragraph & indent buttons to askvortsov/flarum-rich-text.",
+  "type": "flarum-extension",
+  "license": "MIT",
+  "require": {
+    "flarum/core": "^1.8",
+    "askvortsov/flarum-rich-text": "^2.0 || ^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "LadyByron\\\\MoreFormat\\\\": "src/"
+    }
+  },
+  "extra": {
+    "flarum-extension": {
+      "title": "More Format (RTE)",
+      "icon": { "name": "fas fa-i-cursor" }
+    },
+    "frontend": {
+      "forum": ["js/dist/forum.js"]
+    }
+  }
+}
