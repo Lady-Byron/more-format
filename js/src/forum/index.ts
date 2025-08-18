@@ -3,33 +3,50 @@ import app from 'flarum/forum/app';
 const MARK_ATTR = 'data-lb-moreformat-mounted';
 
 function findToolbars(): Element[] {
-  // 同时适配富文本工具栏 & 传统编辑器工具栏
   return Array.from(
     document.querySelectorAll('.RichTextEditor-toolbar, .TextEditor-controls')
   );
 }
 
-function insertAtCursor(htmlOrText: string, isHTML = false) {
-  // 优先富文本
-  const rted = document.querySelector(
-    '.RichText-editor[contenteditable="true"]'
-  ) as HTMLElement | null;
-
+function insertIndent() {
+  // 段首缩进：两个全角空格（U+3000）
+  const rted = document.querySelector('.RichText-editor[contenteditable="true"]') as HTMLElement | null;
   if (rted) {
     rted.focus();
-    if (isHTML) document.execCommand('insertHTML', false, htmlOrText);
-    else document.execCommand('insertText', false, htmlOrText);
+    document.execCommand('insertText', false, '\u3000\u3000');
     return;
   }
-  // 兼容纯文本编辑器
-  const ta = document.querySelector('.TextEditor textarea') as
-    | HTMLTextAreaElement
-    | null;
+  const ta = document.querySelector('.TextEditor textarea') as HTMLTextAreaElement | null;
   if (ta) {
     const start = ta.selectionStart ?? ta.value.length;
     const end = ta.selectionEnd ?? start;
-    ta.value = ta.value.slice(0, start) + htmlOrText + ta.value.slice(end);
-    ta.selectionStart = ta.selectionEnd = start + htmlOrText.length;
+    const s = '\u3000\u3000';
+    ta.value = ta.value.slice(0, start) + s + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + s.length;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+  }
+}
+
+function insertBlankParagraph() {
+  // 空白段落：一整段只有 NBSP 的段落
+  const rted = document.querySelector('.RichText-editor[contenteditable="true"]') as HTMLElement | null;
+  if (rted) {
+    rted.focus();
+    // 新段 -> NBSP -> 再起新段，让 NBSP 段独立存在
+    document.execCommand('insertParagraph');                   // 开一个新段
+    document.execCommand('insertText', false, '\u00A0');       // 放入 NBSP 字符（不是 "&nbsp;"）
+    document.execCommand('insertParagraph');                   // 再开下一段
+    return;
+  }
+  // 纯文本编辑器回退：插入 \n NBSP \n
+  const ta = document.querySelector('.TextEditor textarea') as HTMLTextAreaElement | null;
+  if (ta) {
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? start;
+    const s = '\n\u00A0\n';
+    ta.value = ta.value.slice(0, start) + s + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + s.length;
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.focus();
   }
@@ -37,7 +54,7 @@ function insertAtCursor(htmlOrText: string, isHTML = false) {
 
 function mountButtons(toolbar: Element) {
   const root = toolbar as HTMLElement;
-  if (root.getAttribute(MARK_ATTR)) return; // 避免重复挂载
+  if (root.getAttribute(MARK_ATTR)) return;
   root.setAttribute(MARK_ATTR, '1');
 
   const group = root.querySelector('.ButtonGroup') ?? root;
@@ -55,18 +72,16 @@ function mountButtons(toolbar: Element) {
     return btn;
   };
 
-  // 空白段落：插入仅含 NBSP 的 <p>
   const btnBlank = mk(
     (app.translator.trans('lady-byron-more-format.forum.blank_paragraph') as unknown) as string,
     'fas fa-paragraph',
-    () => insertAtCursor('<p>&nbsp;</p>', true)
+    insertBlankParagraph
   );
 
-  // 段首缩进：两个全角空格（U+3000）
   const btnIndent = mk(
     (app.translator.trans('lady-byron-more-format.forum.indent') as unknown) as string,
     'fas fa-indent',
-    () => insertAtCursor('\u3000\u3000', false)
+    insertIndent
   );
 
   group.appendChild(btnBlank);
@@ -75,10 +90,8 @@ function mountButtons(toolbar: Element) {
 
 app.initializers.add('lady-byron/more-format', () => {
   const tick = () => findToolbars().forEach(mountButtons);
-
   tick();
   new MutationObserver(tick).observe(document.body, { childList: true, subtree: true });
-  // 路由切换后也再试一次
   (app.history as any)?.on?.('push', tick);
   (app.history as any)?.on?.('pop', tick);
 });
