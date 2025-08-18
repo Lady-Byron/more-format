@@ -1,0 +1,12 @@
+{
+  "name": "lady-byron-more-format",
+  "private": true,
+  "scripts": {
+    "build": "flarum-webpack --config webpack.config.js --mode production",
+    "dev": "flarum-webpack --config webpack.config.js --mode development --watch"
+  },
+  "devDependencies": {
+    "@flarum/webpack-config": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}
