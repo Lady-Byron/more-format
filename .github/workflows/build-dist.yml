@@ -2,11 +2,7 @@ name: build-dist
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'js/**'
-      - '!js/dist/**'        # 避免因回推 dist 再次触发
-      - 'resources/locale/**'
-      - 'composer.json'
+  workflow_dispatch:
 permissions:
   contents: write             # 允许工作流推送回仓库（很关键）
 jobs:
