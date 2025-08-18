@@ -3,14 +3,9 @@
     "target": "ES2017",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "react-jsx",
-    "jsxImportSource": "mithril",
     "strict": false,
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "flarum/*": ["../node_modules/flarum/*"]
-    }
+    "lib": ["ES2017", "DOM"]
   },
   "include": ["src/**/*"]
 }
