@@ -2,28 +2,24 @@ import app from 'flarum/forum/app';
 
 const MARK_ATTR = 'data-lb-moreformat-mounted';
 
-// —— 统一找“当前可编辑区”：优先富文本(.ProseMirror)，其次旧文本框 ——
+/** —— 找“当前可编辑区”：优先富文本(.ProseMirror)，其次旧文本框 —— */
 function getRteEditable(): HTMLElement | null {
-  // RTE 的真实编辑区
   const pm = document.querySelector('.ProseMirror[contenteditable="true"]') as HTMLElement | null;
   if (pm) return pm;
-
-  // 某些主题旧类名（备援）
   const r1 = document.querySelector('.RichText-editor[contenteditable="true"]') as HTMLElement | null;
   if (r1) return r1;
-
   return null;
 }
 function getTextarea(): HTMLTextAreaElement | null {
   return document.querySelector('.TextEditor textarea') as HTMLTextAreaElement | null;
 }
 
-// —— 基础操作：插入文字、起新段（同时兼容 RTE / 旧编辑器） ——
+/** —— 基础操作：插入文字、起新段（兼容 RTE / 旧编辑器） —— */
 function insertTextRT(text: string) {
   const ed = getRteEditable();
   if (ed) {
     ed.focus();
-    document.execCommand('insertText', false, text); // 由 ProseMirror 接管
+    document.execCommand('insertText', false, text);
     return true;
   }
   const ta = getTextarea();
@@ -43,7 +39,7 @@ function insertParagraphRT() {
   const ed = getRteEditable();
   if (ed) {
     ed.focus();
-    document.execCommand('insertParagraph');        // 触发 RTE 的起段逻辑
+    document.execCommand('insertParagraph');
     return true;
   }
   const ta = getTextarea();
@@ -59,26 +55,53 @@ function insertParagraphRT() {
   return false;
 }
 
-// —— 现有两个功能 ——
-function runIndent() { insertTextRT('\u3000\u3000'); }
+/** —— 现有两个功能 —— */
+function runIndent() {
+  insertTextRT('\u3000\u3000'); // 两个全角空格
+}
 
 function runBlank(n = 1) {
   for (let i = 0; i < n; i++) {
-    insertParagraphRT();                 // 开新段
-    insertTextRT('\u00A0');              // 放入真实 NBSP（不是字面“&nbsp;”）
-    insertParagraphRT();                 // 再开下一段
+    insertParagraphRT();
+    insertTextRT('\u00A0');     // 真实 NBSP（不是字符串“&nbsp;”）
+    insertParagraphRT();
   }
 }
 
-// —— 工具栏挂载（保持不变） ——
-type Tool = { key: string; title: string; icon: string; run: () => void; };
+/** —— 翻译兜底 + 挂载后延迟刷新标题 —— */
+function tt(key: string, fallback: string) {
+  try {
+    const s = (app.translator.trans(key) as unknown) as string;
+    return !s || s === key ? fallback : s;
+  } catch {
+    return fallback;
+  }
+}
+function setBtnTitle(btn: HTMLElement, key: string, fallback: string) {
+  const text = tt(key, fallback);
+  btn.setAttribute('title', text);
+  btn.setAttribute('aria-label', text);
+  // 首帧 & 稍后再刷新一次，避免首次挂载时翻译尚未可用
+  requestAnimationFrame(() => {
+    const t2 = tt(key, fallback);
+    btn.setAttribute('title', t2);
+    btn.setAttribute('aria-label', t2);
+  });
+  setTimeout(() => {
+    const t3 = tt(key, fallback);
+    btn.setAttribute('title', t3);
+    btn.setAttribute('aria-label', t3);
+  }, 300);
+}
+
+/** —— 工具栏挂载 —— */
+type Tool = { key: string; i18nKey: string; fallback: string; icon: string; run: () => void };
 const tools: Tool[] = [
-  { key: 'blank-1', title: app.translator.trans('lady-byron-more-format.forum.blank_paragraph') as any, icon: 'fas fa-paragraph', run: () => runBlank(1) },
-  { key: 'indent',  title: app.translator.trans('lady-byron-more-format.forum.indent') as any,         icon: 'fas fa-indent',    run: runIndent },
+  { key: 'blank-1', i18nKey: 'lady-byron-more-format.forum.blank_paragraph', fallback: '空白段落', icon: 'fas fa-paragraph', run: () => runBlank(1) },
+  { key: 'indent',  i18nKey: 'lady-byron-more-format.forum.indent',          fallback: '段首缩进', icon: 'fas fa-indent',    run: runIndent },
 ];
 
 function findToolbars(): Element[] {
-  // 兼容富文本和原生工具栏
   return Array.from(document.querySelectorAll('.RichTextEditor-toolbar, .TextEditor-controls'));
 }
 
@@ -93,8 +116,8 @@ function mountButtons(toolbar: Element) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'Button Button--icon';
-    btn.title = t.title;
     btn.innerHTML = `<i class="${t.icon}"></i>`;
+    setBtnTitle(btn, t.i18nKey, t.fallback);
     btn.addEventListener('click', (e) => { e.preventDefault(); t.run(); });
     group.appendChild(btn);
   }
@@ -105,5 +128,5 @@ app.initializers.add('lady-byron/more-format', () => {
   tick();
   new MutationObserver(tick).observe(document.body, { childList: true, subtree: true });
   (app.history as any)?.on?.('push', tick);
-  (app.history as any)?.on?.('pop', tick);
+  (app.history as any)?.on?.('pop',  tick);
 });
