@@ -3,19 +3,13 @@ name: build-dist
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'js/**'
-      - 'resources/locale/**'
-      - 'composer.json'
-      - '.github/workflows/build-dist.yml'   # 改动工作流本身也触发
-  workflow_dispatch:                          # 允许在 Actions 页面手动运行
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    # 防止由机器人回推 dist 时再次触发递归构建
     if: github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
@@ -29,28 +23,32 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # ❌ 不再设置 cache / cache-dependency-path，避免因 lockfile 不存在而报错
 
-      - name: Install deps & build
+      - name: Install deps
         working-directory: js
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm i
-          fi
+          npm i
+
+      - name: Build
+        working-directory: js
+        run: |
           npm run build
 
-      - name: Commit dist if changed
+      - name: Assert dist produced
+        run: |
+          echo "== List js/dist =="
+          ls -lah js/dist || true
+          test -f js/dist/forum.js || { echo "::error::js/dist/forum.js not found after build"; exit 1; }
+
+      - name: Commit dist (force add even if ignored)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A js/dist
+          # 强制添加以忽略 .gitignore 的干扰
+          git add -f js/dist
           if ! git diff --cached --quiet; then
             git commit -m "build: update dist [skip ci]"
             git push
           else
             echo "No changes to commit."
           fi
-
-
