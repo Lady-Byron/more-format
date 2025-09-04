@@ -5,9 +5,7 @@
     "moduleResolution": "Bundler",
     "strict": false,
     "skipLibCheck": true,
-    "lib": ["ES2017", "DOM"],
-    "jsx": "react-jsx",
-    "jsxImportSource": "mithril"
+    "lib": ["ES2017", "DOM"]
   },
   "include": ["src/**/*"]
 }
