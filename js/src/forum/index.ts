@@ -2,7 +2,7 @@ import app from 'flarum/forum/app';
 
 const MARK_ATTR = 'data-lb-moreformat-mounted';
 
-/** —— 找“当前可编辑区”：优先富文本(.ProseMirror)，其次旧文本框 —— */
+/** —— 获取当前编辑区域 —— */
 function getRteEditable(): HTMLElement | null {
   const pm = document.querySelector('.ProseMirror[contenteditable="true"]') as HTMLElement | null;
   if (pm) return pm;
@@ -14,7 +14,7 @@ function getTextarea(): HTMLTextAreaElement | null {
   return document.querySelector('.TextEditor textarea') as HTMLTextAreaElement | null;
 }
 
-/** —— 基础操作：插入文字、起新段（兼容 RTE / 旧编辑器） —— */
+/** —— 兼容 RTE / 旧文本框 的插入 —— */
 function insertTextRT(text: string) {
   const ed = getRteEditable();
   if (ed) {
@@ -63,12 +63,11 @@ function runIndent() {
 function runBlank(n = 1) {
   for (let i = 0; i < n; i++) {
     insertParagraphRT();
-    insertTextRT('\u00A0');     // 真实 NBSP
+    insertTextRT('\u00A0');     // 实体 NBSP
     insertParagraphRT();
   }
 }
 
-/** 包裹为 BBCode（[center]/[right]）。RTE 有选区时会替换选区；无选区则插入成对标签 */
 function wrapWithTagRT(tag: 'center' | 'right') {
   const open = `[${tag}]`;
   const close = `[/${tag}]`;
@@ -81,8 +80,9 @@ function wrapWithTagRT(tag: 'center' | 'right') {
     if (selected) {
       document.execCommand('insertText', false, open + selected + close);
     } else {
-      // 无选区：简单插入成对标签（光标会在 close 后）
       document.execCommand('insertText', false, open + close);
+      // 无选区时：把光标移到 open/close 中间
+      //（RTE 下无法可靠设置选区，交给用户直接输入）
     }
     return true;
   }
@@ -96,7 +96,6 @@ function wrapWithTagRT(tag: 'center' | 'right') {
     const after = ta.value.slice(end);
     ta.value = before + open + selected + close + after;
 
-    // 选中时：把光标放到 close 后；无选中时：把光标放在 open/close 中间
     if (selected) {
       const pos = (before + open + selected + close).length;
       ta.selectionStart = ta.selectionEnd = pos;
@@ -109,11 +108,10 @@ function wrapWithTagRT(tag: 'center' | 'right') {
     ta.focus();
     return true;
   }
-
   return false;
 }
 
-/** —— 翻译兜底 + 挂载后延迟刷新标题 —— */
+/** —— 翻译兜底 —— */
 function tt(key: string, fallback: string) {
   try {
     const s = (app.translator.trans(key) as unknown) as string;
@@ -141,22 +139,29 @@ function setBtnTitle(btn: HTMLElement, key: string, fallback: string) {
 /** —— 工具栏挂载 —— */
 type Tool = { key: string; i18nKey: string; fallback: string; icon: string; run: () => void };
 const tools: Tool[] = [
-  { key: 'blank-1', i18nKey: 'lady-byron-more-format.forum.blank_paragraph', fallback: '空白段落', icon: 'fas fa-paragraph', run: () => runBlank(1) },
-  { key: 'indent',  i18nKey: 'lady-byron-more-format.forum.indent',          fallback: '段首缩进', icon: 'fas fa-indent',    run: runIndent },
+  { key: 'blank-1', i18nKey: 'lady-byron-more-format.forum.blank_paragraph', fallback: '空白段落', icon: 'fas fa-paragraph',   run: () => runBlank(1) },
+  { key: 'indent',  i18nKey: 'lady-byron-more-format.forum.indent',          fallback: '段首缩进', icon: 'fas fa-indent',      run: runIndent },
   { key: 'center',  i18nKey: 'lady-byron-more-format.forum.center',          fallback: '居中',     icon: 'fas fa-align-center', run: () => wrapWithTagRT('center') },
   { key: 'right',   i18nKey: 'lady-byron-more-format.forum.right',           fallback: '右对齐',   icon: 'fas fa-align-right',  run: () => wrapWithTagRT('right') },
 ];
 
-function findToolbars(): Element[] {
-  return Array.from(document.querySelectorAll('.RichTextEditor-toolbar, .TextEditor-controls'));
+function findToolbars(): HTMLElement[] {
+  // 覆盖 RTE 与纯文本编辑器两种工具栏
+  return Array.from(document.querySelectorAll<HTMLElement>('.RichTextEditor-toolbar, .TextEditor-controls'));
 }
 
-function mountButtons(toolbar: Element) {
-  const root = toolbar as HTMLElement;
-  if (root.getAttribute(MARK_ATTR)) return;
-  root.setAttribute(MARK_ATTR, '1');
+function pickButtonGroup(root: HTMLElement): HTMLElement {
+  // 优先把按钮插到“最后一个” ButtonGroup，避免被别的扩展插在前面导致不可见
+  const groups = root.querySelectorAll<HTMLElement>('.ButtonGroup');
+  if (groups.length) return groups[groups.length - 1];
+  return root;
+}
 
-  const group = root.querySelector('.ButtonGroup') ?? root;
+function mountButtons(toolbar: HTMLElement) {
+  if (toolbar.getAttribute(MARK_ATTR)) return;
+  toolbar.setAttribute(MARK_ATTR, '1');
+
+  const group = pickButtonGroup(toolbar);
 
   for (const t of tools) {
     const btn = document.createElement('button');
@@ -176,3 +181,4 @@ app.initializers.add('lady-byron/more-format', () => {
   (app.history as any)?.on?.('push', tick);
   (app.history as any)?.on?.('pop',  tick);
 });
+
