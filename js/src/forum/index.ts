@@ -55,7 +55,7 @@ function insertParagraphRT() {
   return false;
 }
 
-/** —— 现有两个功能 —— */
+/** —— 功能实现 —— */
 function runIndent() {
   insertTextRT('\u3000\u3000'); // 两个全角空格
 }
@@ -63,9 +63,54 @@ function runIndent() {
 function runBlank(n = 1) {
   for (let i = 0; i < n; i++) {
     insertParagraphRT();
-    insertTextRT('\u00A0');     // 真实 NBSP（不是字符串“&nbsp;”）
+    insertTextRT('\u00A0');     // 真实 NBSP
     insertParagraphRT();
   }
+}
+
+/** 包裹为 BBCode（[center]/[right]）。RTE 有选区时会替换选区；无选区则插入成对标签 */
+function wrapWithTagRT(tag: 'center' | 'right') {
+  const open = `[${tag}]`;
+  const close = `[/${tag}]`;
+
+  const ed = getRteEditable();
+  if (ed) {
+    ed.focus();
+    const sel = window.getSelection();
+    const selected = sel && sel.rangeCount > 0 ? sel.toString() : '';
+    if (selected) {
+      document.execCommand('insertText', false, open + selected + close);
+    } else {
+      // 无选区：简单插入成对标签（光标会在 close 后）
+      document.execCommand('insertText', false, open + close);
+    }
+    return true;
+  }
+
+  const ta = getTextarea();
+  if (ta) {
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? start;
+    const selected = ta.value.slice(start, end);
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    ta.value = before + open + selected + close + after;
+
+    // 选中时：把光标放到 close 后；无选中时：把光标放在 open/close 中间
+    if (selected) {
+      const pos = (before + open + selected + close).length;
+      ta.selectionStart = ta.selectionEnd = pos;
+    } else {
+      const pos = (before + open).length;
+      ta.selectionStart = ta.selectionEnd = pos;
+    }
+
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+    return true;
+  }
+
+  return false;
 }
 
 /** —— 翻译兜底 + 挂载后延迟刷新标题 —— */
@@ -81,7 +126,6 @@ function setBtnTitle(btn: HTMLElement, key: string, fallback: string) {
   const text = tt(key, fallback);
   btn.setAttribute('title', text);
   btn.setAttribute('aria-label', text);
-  // 首帧 & 稍后再刷新一次，避免首次挂载时翻译尚未可用
   requestAnimationFrame(() => {
     const t2 = tt(key, fallback);
     btn.setAttribute('title', t2);
@@ -99,6 +143,8 @@ type Tool = { key: string; i18nKey: string; fallback: string; icon: string; run:
 const tools: Tool[] = [
   { key: 'blank-1', i18nKey: 'lady-byron-more-format.forum.blank_paragraph', fallback: '空白段落', icon: 'fas fa-paragraph', run: () => runBlank(1) },
   { key: 'indent',  i18nKey: 'lady-byron-more-format.forum.indent',          fallback: '段首缩进', icon: 'fas fa-indent',    run: runIndent },
+  { key: 'center',  i18nKey: 'lady-byron-more-format.forum.center',          fallback: '居中',     icon: 'fas fa-align-center', run: () => wrapWithTagRT('center') },
+  { key: 'right',   i18nKey: 'lady-byron-more-format.forum.right',           fallback: '右对齐',   icon: 'fas fa-align-right',  run: () => wrapWithTagRT('right') },
 ];
 
 function findToolbars(): Element[] {
