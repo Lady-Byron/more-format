@@ -3,7 +3,7 @@ import { extend } from 'flarum/common/extend';
 import Button from 'flarum/common/components/Button';
 
 // askvortsov/flarum-rich-text 的 RTE 组件
-import RichTextEditor from 'askvortsov-rich-text/forum/components/RichTextEditor';
+import RichTextEditor from 'flarum/compat/askvortsov-rich-text/forum/components/RichTextEditor';
 
 // 翻译助手（取不到就用回退文案）
 const t = (key: string, fallback: string) => {
