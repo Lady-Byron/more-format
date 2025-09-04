@@ -1,50 +1,34 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import app from 'flarum/forum/app';
 import { extend } from 'flarum/common/extend';
 import Button from 'flarum/common/components/Button';
 
-// ✅ 用 compat 前缀导入其他扩展的导出
-import RichTextEditor from 'flarum/compat/askvortsov-rich-text/forum/components/RichTextEditor';
-
-// 翻译助手（取不到就用回退文案）
+// --- 翻译助手（取不到就用回退文案）
 const t = (key: string, fallback: string) => {
   const s = (app.translator.trans(key) as unknown) as string;
   return !s || s === key ? fallback : s;
 };
 
-// 插入“只含 NBSP 的段落”：新段 -> NBSP -> 新段（中间段就是空白段）
+// --- RTE 操作：空白段/缩进/BBCode 包裹
 function insertBlankParagraph(editor: any) {
-  editor
-    .chain()
-    .focus()
-    .insertContent({ type: 'paragraph' })
-    .insertContent('\u00A0')
-    .insertContent({ type: 'paragraph' })
-    .run();
+  editor.chain().focus().insertContent({ type: 'paragraph' }).insertContent('\u00A0').insertContent({ type: 'paragraph' }).run();
 }
 
-// 段首缩进：两个全角空格 U+3000
 function insertIndent(editor: any) {
   try {
     const { state } = editor;
     const $from = state.selection.$from;
     const start = $from.start($from.depth);
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: start, to: start })
-      .insertContent('\u3000\u3000')
-      .run();
+    editor.chain().focus().setTextSelection({ from: start, to: start }).insertContent('\u3000\u3000').run();
   } catch {
     editor.chain().focus().insertContent('\u3000\u3000').run();
   }
 }
 
-// 用 BBCode 包裹选区；无选区则插入成对标签并把光标放到中间
 function wrapWithTag(editor: any, tag: 'center' | 'right') {
   const open = `[${tag}]`;
   const close = `[/${tag}]`;
-  const { state } = editor;
-  const sel = state.selection;
+  const sel = editor.state.selection;
 
   if (!sel || sel.empty) {
     editor.chain().focus().insertContent(open + close).run();
@@ -56,22 +40,40 @@ function wrapWithTag(editor: any, tag: 'center' | 'right') {
 
   const from = sel.from;
   const to = sel.to;
-  const selectedText = state.doc.textBetween(from, to, '\n');
+  const selectedText = editor.state.doc.textBetween(from, to, '\n');
 
-  editor
-    .chain()
-    .focus()
-    .deleteRange({ from, to })
-    .insertContent(open + selectedText + close)
-    .run();
+  editor.chain().focus().deleteRange({ from, to }).insertContent(open + selectedText + close).run();
 }
 
 app.initializers.add('lady-byron/more-format', () => {
+  // ❶ 运行时再“拿”别的扩展，确保已加载；并兼容不同导出形态
+  let rich: any;
+  try {
+    // 需要在 webpack.config.js 里 useExtensions: ['askvortsov-rich-text']
+    // 这样这里才有 @askvortsov-rich-text 可用
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    rich = require('@askvortsov-rich-text');
+  } catch (e) {
+    console.warn('[more-format] @askvortsov-rich-text not available', e);
+    return; // 避免初始化失败
+  }
+
+  const RichTextEditor =
+    rich?.components?.RichTextEditor ||
+    rich?.RichTextEditor ||
+    rich?.default?.components?.RichTextEditor ||
+    rich?.default?.RichTextEditor;
+
+  if (!RichTextEditor) {
+    console.warn('[more-format] RichTextEditor export not found on @askvortsov-rich-text', rich);
+    return; // 避免初始化失败
+  }
+
+  // ❷ 正式向 RTE 工具栏注入按钮
   extend(RichTextEditor.prototype as any, 'toolbarItems', function (items: any) {
     const editor = (this as any).editor || (this as any).attrs?.editor;
     if (!editor || !editor.chain) return;
 
-    // 空白段落
     items.add(
       'lb-blank-paragraph',
       <Button
@@ -83,7 +85,6 @@ app.initializers.add('lady-byron/more-format', () => {
       30
     );
 
-    // 段首缩进
     items.add(
       'lb-indent',
       <Button
@@ -95,7 +96,6 @@ app.initializers.add('lady-byron/more-format', () => {
       29
     );
 
-    // 居中
     items.add(
       'lb-center',
       <Button
@@ -107,7 +107,6 @@ app.initializers.add('lady-byron/more-format', () => {
       28
     );
 
-    // 右对齐
     items.add(
       'lb-right',
       <Button
