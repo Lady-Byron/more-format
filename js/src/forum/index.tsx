@@ -5,7 +5,7 @@ import Button from 'flarum/common/components/Button';
 // askvortsov/flarum-rich-text 的 RTE 组件
 import RichTextEditor from 'askvortsov/flarum-rich-text/forum/components/RichTextEditor';
 
-// 翻译小助手（取不到就用回退文案）
+// 翻译助手（取不到就用回退文案）
 const t = (key: string, fallback: string) => {
   const s = (app.translator.trans(key) as unknown) as string;
   return !s || s === key ? fallback : s;
@@ -39,7 +39,7 @@ function insertIndent(editor: any) {
   }
 }
 
-// 用 BBCode 包裹选区；无选区则插入成对标签并把光标放中间
+// 用 BBCode 包裹选区；无选区则插入成对标签并把光标放到中间
 function wrapWithTag(editor: any, tag: 'center' | 'right') {
   const open = `[${tag}]`;
   const close = `[/${tag}]`;
@@ -47,16 +47,19 @@ function wrapWithTag(editor: any, tag: 'center' | 'right') {
   const sel = state.selection;
 
   if (!sel || sel.empty) {
+    // 插入成对标签
     editor.chain().focus().insertContent(open + close).run();
     // 把光标移动到两个标签之间
-    const pos = editor.state.selection.from;
-    editor.chain().setTextSelection({ from: pos - close.length, to: pos - close.length }).run();
+    const posAfter = editor.state.selection.from; // 插入后的位置
+    const inside = posAfter - close.length;
+    editor.chain().setTextSelection({ from: inside, to: inside }).run();
     return;
   }
 
   const from = sel.from;
   const to = sel.to;
   const selectedText = state.doc.textBetween(from, to, '\n');
+
   editor
     .chain()
     .focus()
@@ -119,4 +122,5 @@ app.initializers.add('lady-byron/more-format', () => {
     );
   });
 });
+
 
