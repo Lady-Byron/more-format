@@ -2,8 +2,8 @@ import app from 'flarum/forum/app';
 import { extend } from 'flarum/common/extend';
 import Button from 'flarum/common/components/Button';
 
-// askvortsov/flarum-rich-text 的 RTE 组件
-import RichTextEditor from 'askvortsov/flarum-rich-text/forum/components/RichTextEditor';
+// ✅ 用 compat 前缀导入其他扩展的导出
+import RichTextEditor from 'flarum/compat/askvortsov-rich-text/forum/components/RichTextEditor';
 
 // 翻译助手（取不到就用回退文案）
 const t = (key: string, fallback: string) => {
@@ -47,10 +47,8 @@ function wrapWithTag(editor: any, tag: 'center' | 'right') {
   const sel = state.selection;
 
   if (!sel || sel.empty) {
-    // 插入成对标签
     editor.chain().focus().insertContent(open + close).run();
-    // 把光标移动到两个标签之间
-    const posAfter = editor.state.selection.from; // 插入后的位置
+    const posAfter = editor.state.selection.from;
     const inside = posAfter - close.length;
     editor.chain().setTextSelection({ from: inside, to: inside }).run();
     return;
