@@ -1,8 +1,2 @@
-const path = require('path');
-const base = require('flarum-webpack-config')();
-
-base.entry = {
-  forum: path.resolve(__dirname, 'src/forum/index.ts'),
-};
-
-module.exports = base;
+const config = require('flarum-webpack-config');
+module.exports = config(); // 官方推荐的最简写法
