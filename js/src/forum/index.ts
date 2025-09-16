@@ -68,46 +68,99 @@ function runBlank(n = 1) {
   }
 }
 
+/**
+ * 包裹为 BBCode（[center]/[right]），并且：
+ * - RTE：把标签插到“当前块（h1–h5/p/li/blockquote/div）”的外侧，各自独占一行
+ * - 旧文本框：包住“当前整行/多行”，并让 open/close 各自独立成行
+ */
 function wrapWithTagRT(tag: 'center' | 'right') {
   const open = `[${tag}]`;
   const close = `[/${tag}]`;
 
+  // —— RTE（ProseMirror）分支 —— //
   const ed = getRteEditable();
   if (ed) {
     ed.focus();
+
     const sel = window.getSelection();
-    const selected = sel && sel.rangeCount > 0 ? sel.toString() : '';
-    if (selected) {
-      document.execCommand('insertText', false, open + selected + close);
-    } else {
-      document.execCommand('insertText', false, open + close);
-      // 无选区时：把光标移到 open/close 中间
-      //（RTE 下无法可靠设置选区，交给用户直接输入）
+    const rng = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+
+    // 找到当前（或光标处）块级元素
+    let anchor: Node | null = rng ? rng.startContainer : ed;
+    if (anchor.nodeType === Node.TEXT_NODE) anchor = anchor.parentNode;
+    let block = (anchor as Element | null)?.closest('h1,h2,h3,h4,h5,p,li,blockquote,div') as HTMLElement | null;
+    if (!block) block = ed;
+
+    // 若选区跨越多个块，退回到“包选中文本”的最小策略
+    if (rng && sel) {
+      const startBlock = (rng.startContainer.nodeType === 3 ? rng.startContainer.parentNode : (rng.startContainer as Element))
+        ?.closest('h1,h2,h3,h4,h5,p,li,blockquote,div');
+      const endBlock = (rng.endContainer.nodeType === 3 ? rng.endContainer.parentNode : (rng.endContainer as Element))
+        ?.closest('h1,h2,h3,h4,h5,p,li,blockquote,div');
+      if (startBlock && endBlock && startBlock !== endBlock) {
+        document.execCommand('insertText', false, open + sel.toString() + close);
+        return true;
+      }
+    }
+
+    // 在块的前后插入文本节点，确保 open/close 独占一行
+    const parent = block.parentNode;
+    if (parent) {
+      // 前面：如果前一个兄弟不是以换行结尾，手动补一个换行
+      const needsLeadingNewline =
+        block.previousSibling &&
+        block.previousSibling.nodeType === Node.TEXT_NODE &&
+        (block.previousSibling as Text).data.endsWith('\n')
+          ? ''
+          : '\n';
+
+      const beforeNode = document.createTextNode((block === ed ? '' : needsLeadingNewline) + open + '\n');
+      parent.insertBefore(beforeNode, block);
+
+      // 后面：同理，保证换行 + close
+      const needsTrailingNewline =
+        block.nextSibling &&
+        block.nextSibling.nodeType === Node.TEXT_NODE &&
+        (block.nextSibling as Text).data.startsWith('\n')
+          ? ''
+          : '\n';
+
+      const afterNode = document.createTextNode(needsTrailingNewline + close);
+      if (block.nextSibling) parent.insertBefore(afterNode, block.nextSibling);
+      else parent.appendChild(afterNode);
     }
     return true;
   }
 
+  // —— 旧文本框分支：包住“当前整行/多行”，open/close 各占一行 —— //
   const ta = getTextarea();
   if (ta) {
-    const start = ta.selectionStart ?? ta.value.length;
-    const end = ta.selectionEnd ?? start;
-    const selected = ta.value.slice(start, end);
-    const before = ta.value.slice(0, start);
-    const after = ta.value.slice(end);
-    ta.value = before + open + selected + close + after;
+    const value = ta.value;
+    const start = ta.selectionStart ?? 0;
+    const end   = ta.selectionEnd   ?? start;
 
-    if (selected) {
-      const pos = (before + open + selected + close).length;
-      ta.selectionStart = ta.selectionEnd = pos;
-    } else {
-      const pos = (before + open).length;
-      ta.selectionStart = ta.selectionEnd = pos;
-    }
+    // 当前选择覆盖的“首行开头”和“末行末尾”
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd   = (value.indexOf('\n', end) === -1) ? value.length : value.indexOf('\n', end);
 
+    const before = value.slice(0, lineStart);
+    const middle = value.slice(lineStart, lineEnd);
+    const after  = value.slice(lineEnd);
+
+    // 保证 open/close 独立成行
+    const prefixNL = (before.endsWith('\n') || before.length === 0) ? '' : '\n';
+    const suffixNL = (after.startsWith('\n') || after.length === 0) ? '' : '\n';
+
+    ta.value = before + open + '\n' + middle + '\n' + close + (after.startsWith('\n') ? after : '\n' + after);
+
+    // 光标放到 close 之后
+    const pos = (before + open + '\n' + middle + '\n' + close + '\n').length;
+    ta.selectionStart = ta.selectionEnd = pos;
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.focus();
     return true;
   }
+
   return false;
 }
 
@@ -181,4 +234,3 @@ app.initializers.add('lady-byron/more-format', () => {
   (app.history as any)?.on?.('push', tick);
   (app.history as any)?.on?.('pop',  tick);
 });
-
